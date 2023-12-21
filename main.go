@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt"
+	_ "github.com/golang-jwt/jwt"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 type bookinfo struct {
@@ -61,7 +64,10 @@ var booklist = library{
 
 // for homepage
 func homepage(response http.ResponseWriter, request *http.Request) {
-	fmt.Fprintf(response, "welcome to the home page of central Library Collections\n")
+	_, err := fmt.Fprintf(response, "welcome to the home page of central Library Collections\n")
+	if err != nil {
+		return
+	}
 }
 
 // give all book info
@@ -83,7 +89,10 @@ func specificBookID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "Archived Information of : \n")
+	_, err = fmt.Fprintf(w, "Archived Information of : \n")
+	if err != nil {
+		return
+	}
 	flag := false
 
 	for _, t := range booklist {
@@ -98,15 +107,21 @@ func specificBookID(w http.ResponseWriter, r *http.Request) {
 
 	if flag {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "Book information showed Successfully")
+		_, err := fmt.Fprintf(w, "Book information showed Successfully")
+		if err != nil {
+			return
+		}
 	} else {
-		fmt.Fprintf(w, "BookID doesn't found in this archive")
+		_, err := fmt.Fprintf(w, "BookID doesn't found in this archive")
+		if err != nil {
+			return
+		}
 	}
 }
 
-// add book to the booklist
-func createlist(w http.ResponseWriter, r *http.Request) {
-	var list []bookinfo //it's a bookinfo type array for creating  book information of multiples
+// add book to the book list
+func createList(w http.ResponseWriter, r *http.Request) {
+	var list []bookinfo //it's a book info type array for creating  book information of multiples
 	err := json.NewDecoder(r.Body).Decode(&list)
 	if err != nil {
 		//fmt.Println("jugsfkjugvkgrk")
@@ -115,7 +130,10 @@ func createlist(w http.ResponseWriter, r *http.Request) {
 
 	booklist = append(booklist, list...)
 
-	fmt.Fprintf(w, "New Book is added to the Archive")
+	_, err = fmt.Fprintf(w, "New Book is added to the Archive")
+	if err != nil {
+		return
+	}
 	w.WriteHeader(http.StatusCreated) //201
 }
 
@@ -160,30 +178,94 @@ func deleteBook(w http.ResponseWriter, r *http.Request) {
 	for i, ll := range booklist {
 		if ll.Id == bookID {
 			booklist = append(booklist[:i], booklist[i+1:]...)
-			fmt.Fprintf(w, "Deleted the Book information from the Archive")
+			_, err2 := fmt.Fprintf(w, "Deleted the Book information from the Archive")
+			if err2 != nil {
+				return
+			}
 			return
 		}
 	}
-	fmt.Fprintf(w, "Deleted BookID ")
+	_, err = fmt.Fprintf(w, "Deleted Book from archive ")
+	if err != nil {
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 }
+
+func generateJWTKey(SigningKey []byte) (string, error) {
+	//var samplekey = []byte("dynamic")
+
+	token := jwt.New(jwt.SigningMethodHS256)
+	claims := token.Claims.(jwt.MapClaims)
+	claims["exp"] = time.Now().Add(3 * time.Minute).Unix()
+	claims["authorized"] = "true"
+	claims["user"] = "Esha"
+
+	tokenString, err := token.SignedString(SigningKey)
+
+	if err != nil {
+		fmt.Println("Are you really a Human?!!")
+		return "", nil
+	}
+	return tokenString, nil
+}
+
+func verifyAuth(endpoint func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		var sampleJWT = []byte("dynamic")
+
+		bearer := r.Header.Get("Authorization")
+		if len(bearer) > 0 {
+			bearer = bearer[7:]
+
+			token, err := jwt.Parse(bearer, func(token *jwt.Token) (interface{}, error) {
+				_, alg := token.Method.(*jwt.SigningMethodHMAC)
+
+				if !alg {
+					return nil, fmt.Errorf("invalid Error")
+				}
+				return sampleJWT, nil
+			})
+
+			if err != nil {
+				_, err2 := fmt.Fprintf(w, err.Error())
+				if err2 != nil {
+					return
+				}
+			}
+
+			if token.Valid {
+				endpoint(w, r)
+			} else {
+				_, err2 := fmt.Fprintf(w, "! You are not authorized")
+				if err2 != nil {
+					return
+				}
+			}
+		}
+	})
+
+}
+
 func main() {
 	fmt.Println("library collections ----")
+	fmt.Println("Staring to show server status, ")
+
+	//for authorization
+	var samplekey = []byte("dynamic")
+	fmt.Println("generated key is: ")
+	fmt.Println(generateJWTKey(samplekey))
 
 	ch := chi.NewRouter()
 
-	fmt.Println("Staring to show server status, ")
+	ch.HandleFunc("/", verifyAuth(homepage))
+	ch.Get("/library", verifyAuth(p1))
+	ch.Get("/library/{id}", verifyAuth(specificBookID))
 
-	//printing homepage
-	ch.HandleFunc("/", homepage)
-	//ch.Use(middleware.Logger())
-
-	ch.Get("/library", p1)
-	ch.Get("/library/{id}", specificBookID)
-	ch.Post("/library", createlist)
-
-	ch.Put("/library/{id}", bookUpdate)
-	ch.Delete("/library/{id}", deleteBook)
+	ch.Post("/library", verifyAuth(createList))
+	ch.Put("/library/{id}", verifyAuth(bookUpdate))
+	ch.Delete("/library/{id}", verifyAuth(deleteBook))
 
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(8080), ch))
 
