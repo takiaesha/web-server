@@ -1,0 +1,15 @@
+appName: myhelmapp
+
+namespace: default
+
+image:
+  name: takia111/new-image
+  tag: latest
+
+service:
+  port: 3000
+  targetPort: 8080
+
+args: ["server","-p","8080"]
+
+

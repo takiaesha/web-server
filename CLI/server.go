@@ -1,4 +1,4 @@
-package CLI
+package data
 
 import (
 	"example.com/mod/apiCall"
@@ -10,7 +10,7 @@ import (
 var port int
 
 var serverCmd = &cobra.Command{
-	Use:   "server",
+	Use:   "server", //server will hit from this point
 	Short: "web-server is about a Library archive",
 	Long: `This is a demo of Library archive api-server, where you can use the basic methods of
 			PUT, POST, GET, DELETE from postman. This is the server hit-point
